@@ -1,0 +1,8 @@
+{
+  "name": "lucid-replay-local",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test_trade.mjs && node test_chart.mjs && node test_indicators.mjs"
+  }
+}

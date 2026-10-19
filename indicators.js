@@ -1,0 +1,19 @@
+// Causal, dependency-free indicators. Null means insufficient usable history.
+export const catalog={SMA:'Simple moving average',EMA:'Exponential moving average',VWAP:'Session volume-weighted average',BB:'Bollinger Bands',RSI:'Relative strength index',MACD:'Moving average convergence/divergence',ATR:'Average true range',VOLUME:'Traded bar volume'};
+export const defaults=type=>({id:crypto.randomUUID(),type,period:['RSI','ATR'].includes(type)?14:20,mult:2,fast:12,slow:26,signal:9,color:({SMA:'#f5b942',EMA:'#619cff',VWAP:'#d991ec',BB:'#78a9ee',RSI:'#ba9bff',MACD:'#64b5f6',ATR:'#e7b866',VOLUME:'#338d83'})[type],visible:true});
+export function normalizeConfig(items){return (Array.isArray(items)?items:[]).filter(x=>x&&catalog[x.type]).slice(0,16).map(x=>({...x,id:String(x.id),period:Math.max(2,Math.min(200,Math.round(+x.period||20))),mult:Math.max(.1,Math.min(5,+x.mult||2)),fast:Math.max(2,Math.min(100,Math.round(+x.fast||12))),slow:Math.max(3,Math.min(200,Math.round(+x.slow||26))),signal:Math.max(2,Math.min(100,Math.round(+x.signal||9))),color:/^#[0-9a-f]{6}$/i.test(x.color)?x.color:'#619cff',visible:x.visible!==false}));}
+export const defaultConfig=()=>[{id:'volume',type:'VOLUME',period:20,color:'#338d83',visible:true}];
+export function sma(values,n){let out=Array(values.length).fill(null),q=[],sum=0;values.forEach((v,i)=>{if(v===null){q=[];sum=0;return}q.push(v);sum+=v;if(q.length>n)sum-=q.shift();if(q.length===n)out[i]=sum/n});return out}
+export function ema(values,n,alpha=2/(n+1)){let out=Array(values.length).fill(null),seed=[],prev=null;values.forEach((v,i)=>{if(v===null){prev=null;seed=[];return}if(prev===null){seed.push(v);if(seed.length===n)prev=seed.reduce((a,b)=>a+b,0)/n}else prev+=alpha*(v-prev);out[i]=prev});return out}
+const ct=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'});
+export function sessionKey(t){let p=Object.fromEntries(ct.formatToParts(new Date(t*1000)).map(p=>[p.type,p.value]));let d=Date.UTC(+p.year,+p.month-1,+p.day);if(+p.hour<17)d-=86400000;return new Date(d).toISOString().slice(0,10)}
+export function calculate(bars,config,minutes=1){let close=bars.map(b=>b.c),n=config.period||20,type=config.type,a=[];const pane=['RSI','MACD','ATR','VOLUME'].includes(type);let lines=[];
+ if(type==='SMA'||type==='EMA')lines=[{name:type+' '+n,values:type==='SMA'?sma(close,n):ema(close,n)}];
+ if(type==='BB'){let mid=sma(close,n),upper=mid.map((v,i)=>v===null?null:v+(config.mult||2)*Math.sqrt(close.slice(i-n+1,i+1).reduce((s,x)=>s+(x-v)**2,0)/n)),lower=mid.map((v,i)=>v===null?null:2*v-upper[i]);lines=[{name:'BB middle',values:mid},{name:'BB upper',values:upper},{name:'BB lower',values:lower}]}
+ if(type==='RSI'){let gains=close.map((v,i)=>i?Math.max(0,v-close[i-1]):null),losses=close.map((v,i)=>i?Math.max(0,close[i-1]-v):null),g=ema(gains,n,1/n),l=ema(losses,n,1/n);lines=[{name:'RSI '+n,values:g.map((v,i)=>v===null?null:l[i]===0?(v===0?50:100):100-100/(1+v/l[i]))}]}
+ if(type==='ATR'){a=bars.map((b,i)=>i?Math.max(b.h-b.l,Math.abs(b.h-close[i-1]),Math.abs(b.l-close[i-1])):null);lines=[{name:'ATR '+n,values:ema(a,n,1/n)}]}
+ if(type==='MACD'){let f=ema(close,config.fast||12),s=ema(close,config.slow||26),m=f.map((v,i)=>v===null||s[i]===null?null:v-s[i]),signal=ema(m,config.signal||9);lines=[{name:'MACD',values:m},{name:'Signal',values:signal,color:'#f5b942'},{name:'Histogram',values:m.map((v,i)=>v===null||signal[i]===null?null:v-signal[i]),histogram:true}]}
+ if(type==='VOLUME')lines=[{name:'Volume',values:bars.map(b=>b.v),histogram:true}];
+ if(type==='VWAP'){let key=null,pv=0,v=0,valid=false; a=bars.map(b=>{let k=sessionKey(b.t),end=sessionKey(b.t+minutes*60-1);if(k!==key){key=k;pv=0;v=0;valid=sessionKey(b.t-1)!==k}if(k!==end){valid=false;return null}pv+=(b.h+b.l+b.c)/3*b.v;v+=b.v;return valid&&v>0?pv/v:null});lines=[{name:'VWAP · 17:00 Chicago',values:a}]}
+ return {type,pane,config,lines};
+}
