@@ -49,6 +49,23 @@ class Tests(unittest.TestCase):
  def test_future_hidden(self):
   v=self.r.visible(self.s);self.assertTrue(all(b['t']+300<=self.s['clock'] for a in v['bars'].values() for b in a))
   before=copy.deepcopy(v);self.b[31]['h']=5000;self.assertEqual(before,self.r.visible(self.s))
+ def test_hidden_next_candle_does_not_change_preview_or_entry(self):
+  self.order();queued=copy.deepcopy(self.s)
+  before={tf:copy.deepcopy(self.r.visible(self.s,tf)) for tf in (5,15,60,240)}
+  self.b[30].update(o=100,h=111,l=99,c=110)
+  self.r.candle_cache.clear()
+  for tf in before:self.assertEqual(before[tf],self.r.visible(self.s,tf))
+  self.r.step(self.s);win=self.s['trades'][0]
+  self.s=copy.deepcopy(queued)
+  self.b[30].update(o=100,h=101,l=94,c=95)
+  self.r.candle_cache.clear()
+  for tf in before:self.assertEqual(before[tf],self.r.visible(self.s,tf))
+  self.r.step(self.s);loss=self.s['trades'][0]
+  self.assertEqual(win['entry'],100);self.assertEqual(loss['entry'],100)
+  self.assertEqual(win['reason'],'target');self.assertEqual(loss['reason'],'stop')
+  self.assertEqual(win['entry_review'],loss['entry_review'])
+  self.assertEqual(win['exit_available'],queued['clock']+self.r.base)
+  self.assertEqual(loss['exit_available'],queued['clock']+self.r.base)
  def test_aggregate_complete(self):
   t=self.b[0]['t'];self.assertEqual(len(aggregate(self.b,t+600,15)),0);self.assertEqual(len(aggregate(self.b,t+900,15)),1)
  def test_missing_bucket(self):self.assertEqual(aggregate([self.b[0],self.b[2]],self.b[0]['t']+900,15),[])

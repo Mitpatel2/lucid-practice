@@ -102,6 +102,40 @@ The server binds only to loopback. Data and sessions stay on your computer. Do n
 
 Repeated same-direction clicks accumulate exposure within caps. Opposing clicks reduce an open position up to flat; oversized reversals are rejected. Brackets apply to new entries. Orders fill at the next source-bar open, not tick-by-tick. Stops win ambiguous same-bar touches. Gap losses can exceed planned risk. Missing execution data halts replay. Costs include fees and configured slippage. NQ/ES prices are proxies for micro contracts. Winning backtests do not establish an edge.
 
+## Does replay reveal the next candle or use it to choose a fill?
+
+**The next source candle stays hidden until Step or Play advances replay.** Charts,
+price previews and entry reviews use only completed source candles. A forming
+higher-timeframe candle includes only source candles already revealed, not its
+future high, low or close.
+
+A market-order click queues an order; it does not fill at the displayed close.
+On the next replay step, entry uses the next source candle's **open plus configured
+adverse slippage**, with bracket validity and risk checked again at that open.
+The high, low and close do not select the entry price. If the open is outside the
+submitted bracket or exceeds the risk budget, the entry is rejected.
+
+That step then reveals the entire source candle. Its high/low determine whether
+an existing stop or target was touched during that candle. Entry and exit may
+therefore occur in the same step. If both are touched and their order is unknown,
+**stop first** is assumed. Stop gaps use the adverse opening price plus slippage;
+target gaps receive no favorable improvement beyond the target. This is OHLCV
+simulation, not tick replay: it cannot verify intrabar paths, liquidity, queue
+position or actual broker fills. Slippage is configurable, not measured.
+
+The regression test `test_hidden_next_candle_does_not_change_preview_or_entry`
+changes the hidden candle's high/low/close while keeping its open fixed, clears
+chart caches, and checks that previews and entry price remain unchanged. Only
+its outcome changes after stepping. Run it with:
+
+```sh
+python3 -m unittest test_engine.Tests.test_hidden_next_candle_does_not_change_preview_or_entry
+```
+
+The dataset is local and readable by its owner; hiding candles in the interface
+is not an anti-cheating or tamper-proof guarantee. Rewinding also makes subsequent
+practice no longer an unseen test.
+
 ## Privacy
 
 Private datasets, sessions, environment files, credentials, databases, and weights are ignored. The server serves an explicit asset allowlist. Never force-add private files. Begin with fresh repository history; do not import the private bot repository, history, or submodules.
